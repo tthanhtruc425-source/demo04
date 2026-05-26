@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Download and display Kaohsiung City tourism events from the open data URL.
+Download and display open data from URLs.
 
 Usage:
-  python kaohsiung_opendata.py [URL]
+  python kaohsiung_opendata.py [URL] [columns]
 
 If no URL is provided, the script uses the default dataset URL.
+Optional columns: comma-separated column names to display (e.g., "Name,Address,Phone")
 """
 import sys
 import requests
@@ -14,11 +15,11 @@ import csv
 import json
 from typing import List, Dict, Any
 
-DEFAULT_URL = "https://data.kcg.gov.tw/File/DirectDownload/80bbbbd3-9ee4-4244-98e9-b4c08deda91b"
+DEFAULT_URL = "https://data.ntpc.gov.tw/api/datasets/781b822e-214a-4b9a-b4db-32c9f4626d98/csv/file"
 
 
 def download(url: str) -> bytes:
-    resp = requests.get(url, timeout=20)
+    resp = requests.get(url, timeout=20, verify=False)
     resp.raise_for_status()
     return resp.content
 
@@ -48,11 +49,21 @@ def parse_csv(content: bytes) -> List[Dict[str, Any]]:
     return result
 
 
-def print_table(rows: List[Dict[str, Any]], max_rows: int = 20):
+def print_table(rows: List[Dict[str, Any]], selected_columns: List[str] = None, max_rows: int = 20):
     if not rows:
         print("No records found.")
         return
-    headers = list(rows[0].keys())
+    
+    # Use selected columns if provided, otherwise use all columns from first row
+    if selected_columns:
+        headers = selected_columns
+    else:
+        headers = list(rows[0].keys())
+    
+    # Show available columns if none selected
+    if not selected_columns and rows:
+        print(f"\nAvailable columns ({len(headers)}): {', '.join(headers)}\n")
+    
     try:
         from tabulate import tabulate
         print(tabulate([ [r.get(h, "") for h in headers] for r in rows[:max_rows] ], headers=headers, tablefmt="github"))
@@ -71,6 +82,10 @@ def print_table(rows: List[Dict[str, Any]], max_rows: int = 20):
 
 def main(argv):
     url = argv[1] if len(argv) > 1 else DEFAULT_URL
+    selected_columns = None
+    if len(argv) > 2:
+        selected_columns = [col.strip() for col in argv[2].split(",")]
+    
     print(f"Downloading from: {url}")
     content = download(url)
 
@@ -88,7 +103,7 @@ def main(argv):
             rows = []
         print(f"Parsed JSON with {len(rows)} records")
         if rows and isinstance(rows[0], dict):
-            print_table(rows)
+            print_table(rows, selected_columns)
         else:
             print(json.dumps(rows, indent=2, ensure_ascii=False))
         return
@@ -97,7 +112,7 @@ def main(argv):
     try:
         rows = parse_csv(content)
         print(f"Parsed CSV with {len(rows)} records")
-        print_table(rows)
+        print_table(rows, selected_columns)
         return
     except Exception as e:
         print("Failed to parse content as CSV:", e)
